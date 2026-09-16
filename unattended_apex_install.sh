@@ -177,7 +177,9 @@ log_success "Oracle Database 23ai Free package installed"
 # Configure the database silently using ORACLE_PWD environment variable
 log_info "Configuring Oracle Database (creating instance, this takes several minutes)..."
 export ORACLE_PWD="${DB_PASSWORD}"
-/etc/init.d/oracle-free-23ai configure >> "$LOG_FILE" 2>&1
+/etc/init.d/oracle-free-23ai configure >> "$LOG_FILE" 2>&1 <<EOF
+$ORACLE_PWD
+EOF
 unset ORACLE_PWD
 log_success "Oracle Database configured successfully"
 
