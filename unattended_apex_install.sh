@@ -12,6 +12,7 @@ DB_PORT="1521"
 DB_SERVICE="FREEPDB1"
 ORACLE_SID="FREE"
 ORACLE_HOME="/opt/oracle/product/23ai/dbhomeFree"
+ORACLE_DB_DOWNLOAD_LINK="https://download.oracle.com/otn-pub/otn_software/db-free/oracle-database-free-23ai-1.0-1.el8.x86_64.rpm"
 
 # APEX
 APEX_DOWNLOAD_URL="https://download.oracle.com/otn_software/apex/apex_24.2_en.zip"
@@ -170,7 +171,7 @@ log_success "Preinstall package installed"
 
 # Install Oracle Database
 log_info "Installing Oracle Database 23ai Free (this may take a while)..."
-dnf install -y oracle-database-free-23ai >> "$LOG_FILE" 2>&1
+dnf install -y "$ORACLE_DB_DOWNLOAD_LINK" >> "$LOG_FILE" 2>&1
 log_success "Oracle Database 23ai Free package installed"
 
 # Configure the database silently using ORACLE_PWD environment variable
