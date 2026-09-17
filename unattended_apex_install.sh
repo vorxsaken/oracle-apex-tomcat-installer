@@ -4,11 +4,11 @@
 set -euo pipefail
 
 # =============================================================================
-# CONFIGURATION — Edit these variables before running
+# CONFIGURATION — Defaults (can be overridden by interactive prompts)
 # =============================================================================
 
 # Database
-DB_PASSWORD="Tohnga123\$"
+DB_PASSWORD="Admin123#"
 DB_PORT="1521"
 DB_SERVICE="FREEPDB1"
 ORACLE_SID="FREE"
@@ -18,9 +18,9 @@ ORACLE_DB_DOWNLOAD_LINK="https://download.oracle.com/otn-pub/otn_software/db-fre
 # APEX
 APEX_DOWNLOAD_URL="https://download.oracle.com/otn_software/apex/apex_24.2_en.zip"
 APEX_ADMIN_USER="ADMIN"
-APEX_ADMIN_EMAIL="your.email@gmail.com"
-APEX_ADMIN_PASSWORD="Tohnga123\$"
-APEX_PUBLIC_USER_PASSWORD="admin123"
+APEX_ADMIN_EMAIL="user.email@email.com"
+APEX_ADMIN_PASSWORD="Admin123#"
+APEX_PUBLIC_USER_PASSWORD="Admin123#"
 APEX_TABLESPACE="SYSAUX"
 APEX_FILES_TABLESPACE="SYSAUX"
 APEX_TEMP_TABLESPACE="TEMP"
@@ -32,7 +32,7 @@ ORDS_CONFIG_DIR="/etc/ords/config"
 ORDS_STATIC_IMAGES="/opt/oracle/apex/images"
 ORDS_CONTEXT_PATH="/ords"
 ORDS_HTTP_PORT="8080"
-ORDS_EXTERNAL_DOMAIN="https://your-own-domain.care"
+ORDS_EXTERNAL_DOMAIN="https://your.domain.com"
 
 # ORDS Connection Pool
 ORDS_JDBC_INITIAL_LIMIT="15"
@@ -49,6 +49,7 @@ TOMCAT_GROUP="tomcat"
 # Directories
 WORK_DIR="/tmp/apex_install"
 LOG_FILE="/var/log/apex_install.log"
+ORDS_WAR_PATH="${WORK_DIR}/ords.war"
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -97,6 +98,71 @@ log_section() {
     echo "$border" >> "$LOG_FILE"
     echo "  $1" >> "$LOG_FILE"
     echo "$border" >> "$LOG_FILE"
+}
+
+# Prompt user for input with a default value
+# Usage: prompt_input "Description" "DEFAULT_VALUE" VARIABLE_NAME
+prompt_input() {
+    local description="$1"
+    local default_val="$2"
+    local var_name="$3"
+    echo -en "  ${CYAN}${description}${NC} [${YELLOW}${default_val}${NC}]: "
+    read -r user_input
+    if [[ -z "$user_input" ]]; then
+        eval "$var_name=\"$default_val\""
+    else
+        eval "$var_name=\"$user_input\""
+    fi
+}
+
+# =============================================================================
+# DETECTION FUNCTIONS — Check if components are already installed
+# =============================================================================
+
+is_oracle_db_installed() {
+    # Check if Oracle DB service is active AND sqlplus binary exists
+    if systemctl is-active oracle-free-23ai &>/dev/null && [[ -f "${ORACLE_HOME}/bin/sqlplus" ]]; then
+        return 0
+    fi
+    return 1
+}
+
+is_apex_installed() {
+    # Check if APEX is installed by querying for APEX_UTIL package in the PDB
+    if is_oracle_db_installed; then
+        local apex_check
+        apex_check=$(run_sql_file <<'SQL' 2>/dev/null
+ALTER SESSION SET CONTAINER = FREEPDB1;
+SET HEADING OFF FEEDBACK OFF PAGESIZE 0
+SELECT COUNT(*) FROM all_objects WHERE object_name = 'APEX_UTIL' AND object_type = 'PACKAGE';
+EXIT;
+SQL
+        )
+        # Trim whitespace and check if result is greater than 0
+        apex_check=$(echo "$apex_check" | tr -d '[:space:]')
+        if [[ "$apex_check" =~ ^[0-9]+$ ]] && [[ "$apex_check" -gt 0 ]]; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+is_ords_installed() {
+    # Check if ORDS command exists AND config directory has databases configured
+    local ords_exec
+    ords_exec=$(which ords 2>/dev/null || find /usr/local/bin /opt/oracle -name ords 2>/dev/null | head -n 1)
+    if [[ -n "$ords_exec" ]] && [[ -d "${ORDS_CONFIG_DIR}/databases" ]]; then
+        return 0
+    fi
+    return 1
+}
+
+is_tomcat_installed() {
+    # Check if Tomcat service is active AND catalina.sh exists
+    if systemctl is-active tomcat &>/dev/null && [[ -f "${TOMCAT_INSTALL_DIR}/bin/catalina.sh" ]]; then
+        return 0
+    fi
+    return 1
 }
 
 # Error handler
@@ -160,10 +226,93 @@ log_info "Work directory: ${WORK_DIR}"
 log_info "Starting installation at $(date)"
 
 # =============================================================================
+# INTERACTIVE CONFIGURATION
+# =============================================================================
+
+log_section "Configuration"
+echo ""
+echo -e "  ${CYAN}Configure your installation settings.${NC}"
+echo -e "  ${CYAN}Press Enter to accept the default value shown in [brackets].${NC}"
+echo ""
+
+prompt_input "Database SYS password" "Admin123#" DB_PASSWORD
+prompt_input "APEX admin username" "ADMIN" APEX_ADMIN_USER
+prompt_input "APEX admin email" "user.email@email.com" APEX_ADMIN_EMAIL
+prompt_input "APEX admin password" "Admin123#" APEX_ADMIN_PASSWORD
+prompt_input "APEX_PUBLIC_USER password" "Admin123#" APEX_PUBLIC_USER_PASSWORD
+prompt_input "ORDS external domain" "https://your.domain.com" ORDS_EXTERNAL_DOMAIN
+
+echo ""
+echo -e "  ${CYAN}==============================================${NC}"
+echo -e "  ${CYAN}  Configuration Summary${NC}"
+echo -e "  ${CYAN}==============================================${NC}"
+echo ""
+echo -e "  ${CYAN}DB Password:${NC}               ********"
+echo -e "  ${CYAN}APEX Admin User:${NC}           ${APEX_ADMIN_USER}"
+echo -e "  ${CYAN}APEX Admin Email:${NC}          ${APEX_ADMIN_EMAIL}"
+echo -e "  ${CYAN}APEX Admin Password:${NC}       ********"
+echo -e "  ${CYAN}APEX Public User Password:${NC} ********"
+echo -e "  ${CYAN}ORDS External Domain:${NC}      ${ORDS_EXTERNAL_DOMAIN}"
+echo ""
+
+echo -en "  ${YELLOW}Proceed with these settings? [Y/n]: ${NC}"
+read -r confirm
+if [[ "$confirm" =~ ^[Nn] ]]; then
+    log_warn "Installation cancelled by user."
+    exit 0
+fi
+echo ""
+
+# =============================================================================
+# DETECT ALREADY-INSTALLED COMPONENTS
+# =============================================================================
+
+log_section "Checking installed components"
+
+SKIP_ORACLE_DB=false
+SKIP_APEX=false
+SKIP_ORDS=false
+SKIP_TOMCAT=false
+
+if is_oracle_db_installed; then
+    log_success "Oracle Database 23ai — ALREADY INSTALLED (will skip)"
+    SKIP_ORACLE_DB=true
+else
+    log_info "Oracle Database 23ai — not found (will install)"
+fi
+
+if is_apex_installed; then
+    log_success "Oracle APEX — ALREADY INSTALLED (will skip)"
+    SKIP_APEX=true
+else
+    log_info "Oracle APEX — not found (will install)"
+fi
+
+if is_ords_installed; then
+    log_success "ORDS — ALREADY INSTALLED (will skip)"
+    SKIP_ORDS=true
+else
+    log_info "ORDS — not found (will install)"
+fi
+
+if is_tomcat_installed; then
+    log_success "Apache Tomcat — ALREADY INSTALLED (will skip)"
+    SKIP_TOMCAT=true
+else
+    log_info "Apache Tomcat — not found (will install)"
+fi
+
+echo ""
+
+# =============================================================================
 # 1. INSTALL ORACLE DATABASE 23ai FREE
 # =============================================================================
 
 log_section "1/5 — Installing Oracle Database 23ai Free"
+
+if [[ "$SKIP_ORACLE_DB" == true ]]; then
+    log_success "Oracle Database 23ai is already installed — skipping"
+else
 
 # Install prerequisites
 log_info "Installing Oracle Database 23ai preinstall package..."
@@ -209,11 +358,17 @@ EXIT;
 SQL
 log_success "Oracle Database 23ai is running"
 
+fi  # end SKIP_ORACLE_DB
+
 # =============================================================================
 # 2. INSTALL ORACLE APEX
 # =============================================================================
 
 log_section "2/5 — Installing Oracle APEX"
+
+if [[ "$SKIP_APEX" == true ]]; then
+    log_success "Oracle APEX is already installed — skipping"
+else
 
 # Download APEX
 log_info "Downloading Oracle APEX..."
@@ -295,11 +450,17 @@ cp -r "${APEX_DIR}/images" "$ORDS_STATIC_IMAGES"
 chown -R oracle:oinstall "$ORDS_STATIC_IMAGES"
 log_success "APEX images copied to ${ORDS_STATIC_IMAGES}"
 
+fi  # end SKIP_APEX
+
 # =============================================================================
 # 3. INSTALL & CONFIGURE ORDS
 # =============================================================================
 
 log_section "3/5 — Installing ORDS"
+
+if [[ "$SKIP_ORDS" == true ]]; then
+    log_success "ORDS is already installed — skipping"
+else
 
 # Install required packages
 log_info "Installing Java 17 and dependencies..."
@@ -378,15 +539,20 @@ fi
 
 # Generate ORDS WAR file for Tomcat deployment
 log_info "Generating ORDS WAR file..."
-ORDS_WAR_PATH="${WORK_DIR}/ords.war"
 "${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" war "${ORDS_WAR_PATH}" >> "$LOG_FILE" 2>&1
 log_success "ORDS WAR file generated at ${ORDS_WAR_PATH}"
+
+fi  # end SKIP_ORDS
 
 # =============================================================================
 # 4. INSTALL & CONFIGURE TOMCAT
 # =============================================================================
 
 log_section "4/5 — Installing Apache Tomcat ${TOMCAT_VERSION}"
+
+if [[ "$SKIP_TOMCAT" == true ]]; then
+    log_success "Apache Tomcat is already installed — skipping"
+else
 
 # Download Tomcat
 log_info "Downloading Tomcat ${TOMCAT_VERSION}..."
@@ -431,6 +597,12 @@ log_success "Default webapps removed"
 
 # Deploy ORDS WAR
 log_info "Deploying ORDS WAR to Tomcat..."
+# If ORDS was already installed (skipped), we may need to regenerate the WAR
+if [[ ! -f "${ORDS_WAR_PATH}" ]]; then
+    log_info "ORDS WAR file not found — generating..."
+    ORDS_EXEC=$(which ords 2>/dev/null || find /usr/local/bin /opt/oracle -name ords 2>/dev/null | head -n 1)
+    "${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" war "${ORDS_WAR_PATH}" >> "$LOG_FILE" 2>&1
+fi
 cp "${ORDS_WAR_PATH}" "${TOMCAT_INSTALL_DIR}/webapps/ords.war"
 log_success "ORDS WAR deployed to ${TOMCAT_INSTALL_DIR}/webapps/ords.war"
 
@@ -509,6 +681,8 @@ systemctl daemon-reload
 systemctl enable tomcat >> "$LOG_FILE" 2>&1
 systemctl start tomcat >> "$LOG_FILE" 2>&1
 log_success "Tomcat service started and enabled"
+
+fi  # end SKIP_TOMCAT
 
 # =============================================================================
 # 5. VERIFICATION & SUMMARY
