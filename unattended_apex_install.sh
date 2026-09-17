@@ -235,7 +235,7 @@ chown -R oracle:oinstall "$APEX_DIR"
 
 # Install APEX into FREEPDB1
 log_info "Installing APEX into ${DB_SERVICE} (this takes 20-45 minutes)..."
-apexins.sql must be run from the APEX directory
+# apexins.sql must be run from the APEX directory
 APEX_INSTALL_SQL=$(mktemp /tmp/apex_install_XXXXXX.sql)
 cat > "$APEX_INSTALL_SQL" <<SQLEOF
 ALTER SESSION SET CONTAINER = ${DB_SERVICE};
