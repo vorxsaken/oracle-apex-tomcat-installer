@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 set -euo pipefail
@@ -179,6 +180,7 @@ log_info "Configuring Oracle Database (creating instance, this takes several min
 export ORACLE_PWD="${DB_PASSWORD}"
 /etc/init.d/oracle-free-23ai configure >> "$LOG_FILE" 2>&1 <<EOF
 $ORACLE_PWD
+$ORACLE_PWD
 EOF
 unset ORACLE_PWD
 log_success "Oracle Database configured successfully"
@@ -187,9 +189,9 @@ log_success "Oracle Database configured successfully"
 log_info "Setting environment variables for oracle user..."
 ORACLE_BASHRC="/home/oracle/.bash_profile"
 {
-    grep -q "ORACLE_SID" "$ORACLE_BASHRC" || echo "export ORACLE_SID=${ORACLE_SID}"
-    grep -q "ORACLE_HOME" "$ORACLE_BASHRC" || echo "export ORACLE_HOME=${ORACLE_HOME}"
-    grep -q "ORACLE_HOME/bin" "$ORACLE_BASHRC" || echo 'export PATH=$PATH:$ORACLE_HOME/bin'
+   grep -q "ORACLE_SID" "$ORACLE_BASHRC" || echo "export ORACLE_SID=${ORACLE_SID}"
+   grep -q "ORACLE_HOME" "$ORACLE_BASHRC" || echo "export ORACLE_HOME=${ORACLE_HOME}"
+   grep -q "ORACLE_HOME/bin" "$ORACLE_BASHRC" || echo 'export PATH=$PATH:$ORACLE_HOME/bin'
 } >> "$ORACLE_BASHRC"
 log_success "Environment variables set for oracle user"
 
@@ -233,7 +235,7 @@ chown -R oracle:oinstall "$APEX_DIR"
 
 # Install APEX into FREEPDB1
 log_info "Installing APEX into ${DB_SERVICE} (this takes 20-45 minutes)..."
-# apexins.sql must be run from the APEX directory
+apexins.sql must be run from the APEX directory
 APEX_INSTALL_SQL=$(mktemp /tmp/apex_install_XXXXXX.sql)
 cat > "$APEX_INSTALL_SQL" <<SQLEOF
 ALTER SESSION SET CONTAINER = ${DB_SERVICE};
@@ -273,19 +275,17 @@ END;
 /
 EXIT;
 SQLEOF
-log_success "APEX ADMIN account created"
+#log_success "APEX ADMIN account created"
 
 # Configure APEX REST
 log_info "Configuring APEX REST configuration..."
-APEX_REST_SQL=$(mktemp /tmp/apex_rest_XXXXXX.sql)
-cat > "$APEX_REST_SQL" <<SQLEOF
+su - oracle  <<EOF
+cd "$WORK_DIR/apex"
+
+sqlplus / as sysdba
 ALTER SESSION SET CONTAINER = ${DB_SERVICE};
-@apex_rest_config_core.sql ${APEX_PUBLIC_USER_PASSWORD} ${APEX_PUBLIC_USER_PASSWORD}
-EXIT;
-SQLEOF
-chown oracle:oinstall "$APEX_REST_SQL"
-run_as_oracle "cd ${APEX_DIR} && sqlplus -s / as sysdba @${APEX_REST_SQL}" >> "$LOG_FILE" 2>&1 || log_warn "apex_rest_config may have already been run — continuing"
-rm -f "$APEX_REST_SQL"
+@apex_rest_config.sql ${APEX_PUBLIC_USER_PASSWORD} ${APEX_PUBLIC_USER_PASSWORD}
+EOF
 log_success "APEX REST configured"
 
 # Copy APEX images to permanent location
@@ -337,18 +337,8 @@ log_success "ORDS installed"
 
 # Install ORDS schema into the database (silent/non-interactive)
 log_info "Installing ORDS schema into database (non-interactive)..."
-ords --config "${ORDS_CONFIG_DIR}" install \
-     --admin-user SYS \
-     --db-hostname localhost \
-     --db-port "${DB_PORT}" \
-     --db-servicename "${DB_SERVICE}" \
-     --feature-db-api true \
-     --feature-rest-enabled-sql true \
-     --feature-sdw true \
-     --gateway-mode proxied \
-     --gateway-user APEX_PUBLIC_USER \
-     --log-folder /home/oracle/logs \
-     --password-stdin <<ORDSPWD
+ORDS_EXEC=$(which ords 2>/dev/null || find /usr/local/bin /opt/oracle -name ords 2>/dev/null | head -n 1)
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" install --admin-user SYS --db-hostname localhost --db-port "${DB_PORT}" --db-servicename "${DB_SERVICE}" --feature-db-api true --feature-rest-enabled-sql true --feature-sdw true --gateway-mode proxied --gateway-user APEX_PUBLIC_USER --log-folder /home/oracle/logs --password-stdin <<ORDSPWD
 ${DB_PASSWORD}
 ${APEX_PUBLIC_USER_PASSWORD}
 ORDSPWD
@@ -356,18 +346,17 @@ log_success "ORDS schema installed into database"
 
 # Configure ORDS settings
 log_info "Configuring ORDS settings..."
-ords --config "${ORDS_CONFIG_DIR}" config set standalone.context.path "${ORDS_CONTEXT_PATH}"
-ords --config "${ORDS_CONFIG_DIR}" config set standalone.doc.root "${ORDS_CONFIG_DIR}/global/doc_root"
-ords --config "${ORDS_CONFIG_DIR}" config set standalone.http.port "${ORDS_HTTP_PORT}"
-ords --config "${ORDS_CONFIG_DIR}" config set standalone.static.context.path /i
-ords --config "${ORDS_CONFIG_DIR}" config set standalone.static.path "${ORDS_STATIC_IMAGES}/"
-ords --config "${ORDS_CONFIG_DIR}" config set security.externalSessionTrustedOrigins "${ORDS_EXTERNAL_DOMAIN}"
-ords --config "${ORDS_CONFIG_DIR}" config set security.httpsHeaderCheck "X-Forwarded-Proto: https"
-ords --config "${ORDS_CONFIG_DIR}" config set security.forceHTTPS false
-ords --config "${ORDS_CONFIG_DIR}" config set jdbc.InitialLimit "${ORDS_JDBC_INITIAL_LIMIT}"
-ords --config "${ORDS_CONFIG_DIR}" config set jdbc.MaxLimit "${ORDS_JDBC_MAX_LIMIT}"
-ords --config "${ORDS_CONFIG_DIR}" config set jdbc.MinLimit "${ORDS_JDBC_MIN_LIMIT}"
-ords --config "${ORDS_CONFIG_DIR}" config delete db.serviceNameSuffix
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" config set standalone.context.path "${ORDS_CONTEXT_PATH}"
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" config set standalone.doc.root "${ORDS_CONFIG_DIR}/global/doc_root"
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" config set standalone.http.port "${ORDS_HTTP_PORT}"
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" config set standalone.static.context.path /i
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" config set standalone.static.path "${ORDS_STATIC_IMAGES}/"
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" config set security.externalSessionTrustedOrigins "${ORDS_EXTERNAL_DOMAIN}"
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" config set security.httpsHeaderCheck "X-Forwarded-Proto: https"
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" config set security.forceHTTPS true
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" config set jdbc.InitialLimit "${ORDS_JDBC_INITIAL_LIMIT}"
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" config set jdbc.MaxLimit "${ORDS_JDBC_MAX_LIMIT}"
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" config set jdbc.MinLimit "${ORDS_JDBC_MIN_LIMIT}"
 log_success "ORDS settings configured"
 
 # Fix MBEAN Warning in logging.properties
@@ -390,7 +379,7 @@ fi
 # Generate ORDS WAR file for Tomcat deployment
 log_info "Generating ORDS WAR file..."
 ORDS_WAR_PATH="${WORK_DIR}/ords.war"
-ords --config "${ORDS_CONFIG_DIR}" war "${ORDS_WAR_PATH}" >> "$LOG_FILE" 2>&1
+"${ORDS_EXEC}" --config "${ORDS_CONFIG_DIR}" war "${ORDS_WAR_PATH}" >> "$LOG_FILE" 2>&1
 log_success "ORDS WAR file generated at ${ORDS_WAR_PATH}"
 
 # =============================================================================
@@ -514,6 +503,8 @@ log_success "Systemd service file created"
 
 # Enable and start Tomcat
 log_info "Enabling and starting Tomcat service..."
+setenforce 0
+
 systemctl daemon-reload
 systemctl enable tomcat >> "$LOG_FILE" 2>&1
 systemctl start tomcat >> "$LOG_FILE" 2>&1
