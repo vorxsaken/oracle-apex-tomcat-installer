@@ -31,14 +31,12 @@ Script `unattended_apex_install.sh` mengotomasi seluruh proses instalasi stack O
 
 ---
 
-## ⚙️ Konfigurasi
-
-Edit variabel di bagian atas file `unattended_apex_install.sh` sebelum menjalankan:
+## ⚙️ Konfigurasi (Default)
 
 ### Database
 
 ```bash
-DB_PASSWORD="Tohnga123\$"      # Password SYS database
+DB_PASSWORD="Admin123#"      # Password SYS database
 DB_PORT="1521"                  # Port listener
 DB_SERVICE="FREEPDB1"           # Nama PDB service
 ORACLE_SID="FREE"               # Oracle SID
@@ -50,9 +48,9 @@ ORACLE_HOME="/opt/oracle/product/23ai/dbhomeFree"
 ```bash
 APEX_DOWNLOAD_URL="https://download.oracle.com/otn_software/apex/apex_24.2_en.zip"
 APEX_ADMIN_USER="ADMIN"
-APEX_ADMIN_EMAIL="your.email@gmail.com"
-APEX_ADMIN_PASSWORD="Tohnga123\$"
-APEX_PUBLIC_USER_PASSWORD="admin123"
+APEX_ADMIN_EMAIL="user.email@email.com"
+APEX_ADMIN_PASSWORD="Admin123#"
+APEX_PUBLIC_USER_PASSWORD="Admin123#"
 APEX_TABLESPACE="SYSAUX"
 APEX_FILES_TABLESPACE="SYSAUX"
 APEX_TEMP_TABLESPACE="TEMP"
@@ -67,7 +65,7 @@ ORDS_CONFIG_DIR="/etc/ords/config"
 ORDS_STATIC_IMAGES="/opt/oracle/apex/images"
 ORDS_CONTEXT_PATH="/ords"
 ORDS_HTTP_PORT="8080"
-ORDS_EXTERNAL_DOMAIN="https://your-own-domain.care"
+ORDS_EXTERNAL_DOMAIN="https://your.domain.com"
 ```
 
 ### ORDS Connection Pool
@@ -86,9 +84,6 @@ TOMCAT_INSTALL_DIR="/opt/tomcat"
 TOMCAT_USER="tomcat"
 TOMCAT_GROUP="tomcat"
 ```
-
-> [!IMPORTANT]
-> Ganti `APEX_ADMIN_EMAIL`, `APEX_ADMIN_PASSWORD`, `DB_PASSWORD`, dan `ORDS_EXTERNAL_DOMAIN` dengan nilai yang sesuai untuk environment Anda sebelum menjalankan script.
 
 ---
 
@@ -116,7 +111,7 @@ sudo ./unattended_apex_install.sh
 ```
 
 > [!NOTE]
-> Proses instalasi memakan waktu **30–60 menit** tergantung spesifikasi server dan kecepatan internet. Instalasi APEX sendiri membutuhkan sekitar 20–45 menit.
+> Proses instalasi memakan waktu **30–60 menit** tergantung spesifikasi server dan kecepatan internet. Instalasi APEX sendiri membutuhkan sekitar 20–45 menit. Akan ada input yang user harus isi saat menjalankan script ini.
 
 ---
 
