@@ -677,6 +677,8 @@ log_success "Systemd service file created"
 log_info "Enabling and starting Tomcat service..."
 setenforce 0
 
+chcon -R -t bin_t /opt/tomcat/bin/
+
 systemctl daemon-reload
 systemctl enable tomcat >> "$LOG_FILE" 2>&1
 systemctl start tomcat >> "$LOG_FILE" 2>&1
