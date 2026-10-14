@@ -92,7 +92,7 @@ TOMCAT_GROUP="tomcat"
 ### 1. Clone atau Salin Script
 
 ```bash
-git clone https://github.com/<username>/oracle-apex-tomcat-installer.git
+git clone https://github.com/vorxsaken/oracle-apex-tomcat-installer.git
 cd oracle-apex-tomcat-installer
 ```
 
